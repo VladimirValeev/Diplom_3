@@ -2,9 +2,23 @@
 __pycache__/
 *.py[cod]
 
-# Pytest cache
+# Pytest
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Allure
 allure_results/
 allure-report/
+
+# venv
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
