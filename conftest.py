@@ -1,13 +1,17 @@
-import pytest
-from selenium import webdriver
+import logging
+import uuid
 
+import pytest
+import requests
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from pages.main_page import MainPage
+
+
+logger = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
@@ -25,13 +29,26 @@ def pytest_addoption(parser):
     )
 
 
+def pytest_configure(config):
+    # Настраиваем логирование один раз на сессию pytest
+    # (и убираем print'ы по требованию ревью)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+
+@pytest.fixture
+def base_url(request) -> str:
+    return request.config.getoption("--base-url")
+
+
 @pytest.fixture(params=["chrome", "firefox"])
-def driver(request):
-    base_url = request.config.getoption("--base-url")
+def driver(request, base_url):
     headless = request.config.getoption("--headless")
     browser = request.param
 
-    print(f"\nBASE_URL = {base_url}\nBROWSER  = {browser}\nHEADLESS = {headless}\n")
+    logger.info("UI tests config: BASE_URL=%s BROWSER=%s HEADLESS=%s", base_url, browser, headless)
 
     if browser == "chrome":
         options = ChromeOptions()
@@ -65,19 +82,30 @@ def driver(request):
     except TimeoutException:
         pass
 
-    wait = WebDriverWait(drv, 120)
-
-    # 1) Дождаться, что браузер вообще отдал DOM
-    wait.until(lambda d: d.execute_script("return document.readyState") in ("interactive", "complete"))
-
-    # 2) Дождаться, что React/страница реально показала хоть что-то ключевое
-    anchors = EC.any_of(
-        EC.presence_of_element_located((By.XPATH, "//p[contains(., 'Конструктор')]")),
-        EC.presence_of_element_located((By.XPATH, "//p[contains(., 'Лента заказов')]")),
-        EC.presence_of_element_located((By.XPATH, "//*[contains(., 'Соберите бургер')]")),
-        EC.presence_of_element_located((By.CSS_SELECTOR, "a.BurgerIngredient_ingredient__1TVf6")),
-    )
-    wait.until(anchors)
+    # По ревью: никаких локаторов в conftest.
+    # Ожидание готовности приложения делаем методом Page Object.
+    MainPage(drv).wait_app_ready(timeout=120)
 
     yield drv
     drv.quit()
+
+
+@pytest.fixture
+def registered_tokens():
+    """
+    По ревью: из tests/ выносим регистрацию/токены.
+    Возвращает (accessToken, refreshToken).
+    """
+    api_base = "https://stellarburgers.education-services.ru"
+    uniq = uuid.uuid4().hex[:10]
+    payload = {
+        "email": f"vova_{uniq}@test.ru",
+        "password": "Passw0rd!",
+        "name": f"Vova_{uniq}",
+    }
+
+    r = requests.post(f"{api_base}/api/auth/register", json=payload, timeout=20)
+    r.raise_for_status()
+    data = r.json()
+
+    return data["accessToken"], data["refreshToken"]

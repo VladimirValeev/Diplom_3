@@ -3,6 +3,7 @@ import allure
 
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
+from selenium.webdriver.support import expected_conditions as EC
 
 from pages.base_page import BasePage
 
@@ -46,6 +47,21 @@ class MainPage(BasePage):
     ORDER_MODAL = (By.XPATH, "//section[contains(@class,'Modal_modal')]")
     ORDER_NUMBER = (By.XPATH, "//*[contains(@class,'Modal_modal')]//*[contains(@class,'digits')]")
     ORDER_CLOSE = (By.XPATH, "//button[contains(@class,'Modal_modal__close')]")
+
+    @allure.step("Дождаться готовности приложения (якоря UI)")
+    def wait_app_ready(self, timeout=120):
+        """
+        По ревью: ожидания 'якорей' должны быть в Page Object, а не в conftest.
+        Это стабильная точка готовности UI.
+        """
+        anchors = EC.any_of(
+            EC.presence_of_element_located(self.LINK_CONSTRUCTOR),
+            EC.presence_of_element_located(self.LINK_FEED),
+            EC.presence_of_element_located(self.TITLE_CONSTRUCTOR),
+            EC.presence_of_element_located(self.INGREDIENT_CARDS),
+        )
+        self._wait(timeout).until(anchors)
+        return self
 
     # ---------- базовые действия ----------
 
@@ -171,10 +187,6 @@ class MainPage(BasePage):
 
     @allure.step("Добавить первую начинку в конструктор")
     def add_first_filling(self, timeout=60):
-        """
-        Этот метод ДОЛЖЕН существовать, потому что его вызывают тесты counters_after_order.
-        Делает: добавляет начинку (без возврата счётчика).
-        """
         self.add_filling_and_wait_counter(timeout=timeout)
         return self
 
@@ -243,6 +255,12 @@ class MainPage(BasePage):
         self.wait_present(self.ORDER_MODAL, timeout=timeout)
         self.wait_present(self.ORDER_NUMBER, timeout=timeout)
         return self
+
+    @allure.step("Получить номер заказа из модалки")
+    def get_order_number(self, timeout=30) -> str:
+        self.wait_present(self.ORDER_MODAL, timeout=timeout)
+        txt = self.text_of(self.ORDER_NUMBER, timeout=timeout)
+        return "".join(ch for ch in txt if ch.isdigit())
 
     @allure.step("Закрыть модалку заказа")
     def close_order_modal(self, timeout=30):

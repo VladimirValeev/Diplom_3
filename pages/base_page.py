@@ -40,6 +40,17 @@ class BasePage:
         with allure.step(f"Ожидать исчезновение: {locator}"):
             return self._wait(timeout).until(EC.invisibility_of_element_located(locator))
 
+    # ---------- text helpers ----------
+
+    def text_of(self, locator, timeout=None) -> str:
+        """
+        Нужен для FeedPage (и вообще удобен в проекте).
+        Возвращает .text видимого элемента, с trim.
+        """
+        with allure.step(f"Получить текст элемента: {locator}"):
+            el = self.wait_visible(locator, timeout=timeout)
+            return (el.text or "").strip()
+
     # ---------- checks ----------
 
     def is_visible(self, locator, timeout=3):
@@ -203,6 +214,5 @@ class BasePage:
             raise last if last else TimeoutException("DnD failed")
 
     # !!! ВАЖНО: совместимость со старым кодом !!!
-    # Если где-то осталось self.drag_and_drop(...) — оно будет robust.
     def drag_and_drop(self, source, target):
         return self.drag_and_drop_robust(source, target)
